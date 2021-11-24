@@ -1,0 +1,477 @@
+---
+title: "Estimación de las incertidumbres en el proceso de calibración de calibradores acústicos por condiciones ambientales y campos electromagnéticos."
+author: "David B"
+date: "30/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#Librerias
+library(tidyverse)#Visualización, análitica, exploración
+library(plotly)# visualización tipo html
+library(mvtnorm)#Generación de matrices normal multivariantes
+library(MASS)# Generación de vectores normal multivariantes
+library(readxl) # Cargar datos de Excel
+library("PerformanceAnalytics")
+library(GGally)
+library(factoextra)
+library(FactoMineR)
+library(IsoplotR)
+library(MVN)# multivariada
+library(philentropy)# distancias 
+library(cluster)
+library(dendextend)
+library(ClusterR)
+library(ggpubr)
+library(flexclust)
+library(aod)
+library(ggplot2)
+library(nnet)
+library(ROCR)
+library(precrec)
+library(car)
+
+```
+# ANÁLISIS ESTADÍSTICO MULTIVARIADO DATOS TEMPERATURA °C
+## Extracción base de datos
+Se toman los datos las mediciones de lumonocidad
+```{r,echo=TRUE}
+DATOSCA<-read_excel("DataTLuxDBR.xlsx")
+CA<-DATOSCA[c(1:80),c(5:12)]
+names(DATOSCA)
+summary(CA)
+boxplot(CA)
+#weightedmean(cbind(CA[c(1:11),c(1:4)]))
+weightedmean(cbind(CA))
+ggpairs(CA)
+# Distancia de Mahalanobis
+CA1<-CA[,c(1)]/sum(CA[,c(1)])
+CA2<-CA[,c(2)]/sum(CA[,c(2)])
+CA3<-CA[,c(3)]/sum(CA[,c(3)])
+CA4<-CA[,c(4)]/sum(CA[,c(4)])
+CA5<-CA[,c(5)]/sum(CA[,c(5)])
+CA6<-CA[,c(6)]/sum(CA[,c(6)])
+CA7<-CA[,c(7)]/sum(CA[,c(7)])
+CA8<-CA[,c(8)]/sum(CA[,c(8)])
+
+
+# UNIÓN MATRICIAL COLUMNA 1 Y 2
+
+CAN <- cbind(CA1,CA2,CA3,CA4,CA5,CA6,CA7,CA8)
+#CAN <- cbind(CA1,CA2,CA3,CA4)
+# TRANSPUESTA MATRIZ WEN
+CAT<-t(CAN)
+# Matriz de varianzas y covarianzas
+Vmedia1<-colMeans(CAN)
+Vmedia1
+# Estimación de Sigma 
+SigmaE1<-cov(CAN)
+SigmaE1
+# Matriz de correlaciones
+cor(CAN)
+# Distancia de Mahalanobis al 25% de los datos más lejanos
+distanciaCAN<-mahalanobis(CAN,Vmedia1,SigmaE1)
+plot(CAN, pch=20, col="red")
+points(CAN[distanciaCAN>0.25,], pch='.', col="blue")
+chart.Correlation(CAN, histogram=TRUE, pch=19)
+# Histograma
+hist(CAT, col = "green")
+pca=PCA(CA,scale.unit = TRUE,graph = FALSE)
+fviz_screeplot(pca, ncp=10)
+plot(pca, choix = "var")
+fviz_pca_var(pca, col.var="contrib")
+
+
+
+```
+Del summary(CA) observamos que la media y la mediana son iguales
+
+En el diagrama de cajas los difreentes puntos de medicion 
+
+La prueba de wightedmean muestra que a medida que se incrementa la temperatura su coeficiente se incrementa directamente proporcional a esta.
+
+La gráfica de ggpairs(CA) muestra la correlación en los diferentes puentos de medicion 
+
+En la distancia de mahalanobis al ser los datos incrementales las gráficas de correlación son lineas rectas por eso en la carta de correlación (chart.correlation) y en la matriz de correlación (cor(CAN) son iguales a +-1.
+
+El histograma muestra una buena homogeneidad de los datos 
+
+
+
+
+## Verificar Normalidad Univariada y Multivariada
+```{r}
+CAseg<-DATOSCA[c(1:20),c(5:12)]
+Longitud <- c(1:20)
+mvn(data=CAseg, mvnTest="royston", univariatePlot="box")
+P1<-mvn(data=CAseg, mvnTest="royston", univariateTest = "AD", univariatePlot="histogram")
+wilcox.test(Longitud , data = CAseg) 
+P1$Descriptives
+P1$multivariateNormality
+P1$univariateNormality
+
+
+```
+$$
+\begin{cases}
+H_{0}:&\text{los datos siguen una distribución normal}\\
+H_{1}:&\text{los datos no siguen una distribución normal}\\
+\end{cases}
+$$
+- Nivel de significancia $\alpha=0.05$ o $\alpha=0.01$.
+
+- Prueba estadísticas: shapiro-wilks.
+
+- **Decisión:** si $p-value<\alpha,$ la prueba estadística es significativa, no existiría normalidad en los datos.
+
+- La prueba de shapiro-Wilks muestra que se cumple la hipotesis nula $H_{0}$ para cada uno de los calibradores acústicos del   modelo de estudio, de igual forma sucede con la prueba de datos multivariado de Royston, con lo cual se demuestra un        comportamiento que tiene tendencia normal.
+
+## Gráficos univariados y multivariados
+```{r}
+CA<-DATOSCA[c(1:80),c(5:12)]
+## Gráfico univariado
+CA%>%ggplot(aes(x=P1))+geom_density()
+## Gráfico multivariado
+G1<-ggplot(CA,aes(x=P1,P2))+geom_point()+geom_density2d()
+#G1+theme_bw()
+ggplotly(G1)
+```
+Para el gráfico univariado se toman los datos del calibrador acústico marca Svantek y para el gráfico multivariado el de el calibrador acústico Svantek y Quest. En una dimensión, el primer caso muestra un comportamiento tipo gaussiano y en el segundo caso muestra una relación X=Svantek y Y=Quest como una linea recta; esto se debe a que los puntos de compraración en temperatura son incrementales y no se realizan en un valor fijo.
+
+
+
+# ANÁLISIS ESTADÍSTICO MULTIVARIADO DATOS TODMADOS EN EL PROCESOS DE CALIBRACIÓN DE CA
+## Distancias
+Sirven para cuantificar de forma conjunta deistancias entre objetos o individuos.El interes recae en obtener
+una proximidad entre objetos o individuos.
+Cada individuo i puede representarse como un punto Xi ∈ R p . Se pueden tener muchas expresiones para distancia 
+entre individuos entre ellas encontramos:
+Distancia de Euclides.
+Distancia de Minkowski.
+Distancia K. Pearson.
+Distancia Canberra.
+coeficiente de divergencia de Clark.
+Distancia de Mahalanobis.
+
+```{r, echo=TRUE}
+#DATOSWE<-read_excel("DatosC.xlsx",sheet = "Agr_equipos")
+WT<-CA
+#ggpairs(WT)
+# NORMALIZACION DATOS COLUMNA 1 a la 6
+WET1<-WT[,c(1)]/sum(WT[,c(1)])
+WET2<-WT[,c(2)]/sum(WT[,c(2)])
+WET3<-WT[,c(3)]/sum(WT[,c(3)])
+WET4<-WT[,c(4)]/sum(WT[,c(4)])
+WET5<-WT[,c(5)]/sum(WT[,c(5)])
+WET6<-WT[,c(6)]/sum(WT[,c(6)])
+# UNIÓN MATRICIAL COLUMNA 1 Y 2
+WENT <- cbind(WET1,WET2,WET3,WET4,WET5,WET6)
+# TRANSPUESTA MATRIZ WEN
+WET<-t(WENT)
+# NOMBRES DE LOS DATOS DE TODA LA MATRIZ
+#names(DATOSWE)
+# RESUMEN DE ESTADÍSTDICOS DE TODA LA MATRIZ
+summary(WT)
+
+# Diagrama de cajas de los datos
+boxplot(WT)
+# Métodos de cálculo de distancia
+getDistMethods()
+# Dar las medias de fila de un objeto tipo matriz, basado en una variable de agrupación
+
+Vmedia2<-colMeans(WENT)
+Vmedia2
+# Matriz de covarianzas
+SigmaE2<-cov(WENT)# Estimación de Sigma 
+SigmaE2
+
+# Matriz de correlación
+cor(WENT)
+# Distacia de Mahalanobis
+
+distanciaWENT<-mahalanobis(WENT,Vmedia2,SigmaE2)
+plot(WENT, pch=20)
+points(WENT[distanciaWENT>0.25,], pch='.', col="green")
+chart.Correlation(WENT, histogram=TRUE, pch=19)
+# Cálculo de distancias
+distance(WET, method = "euclidean")
+distance(WET,method = "pearson")
+distance(WET, method = "jensen-shannon")
+distance(WET, method = "divergence")
+# Cálculo de todas las distancias del getDistMethods
+#dist.diversity(WET, p = 2, unit = "log2")
+```
+El diagrama de cajas muestra la distribución de los datos para las variables, se eliminan las dos últimas columnas de la matriz porque los datos son cero (0), en conclusión se trabajan con las columnas de la V1 a la y2 (% relative to rated power).
+
+En este punto procedemos a normalizar los datos de la matriz de referencia tomados de: "WakeEffectDataset(Pair1).csv" para proceder al cálculo de las distancias. En el caso de Mahalanobis se resalta el 25% de los datos mas lejanos para la correlación de los datos de la matriz. 
+
+En la carta de correlación encontramos que hay una buena correlación de todos los vectores de la matriz de trabajo. A partir de la columna D de la matriz se presenta una relación de 1:6 con las tres primeras y de 1:1 con las dos últimas. Aunque los histográmas muestran una similitud de datos independiente de la relación de valores.
+
+Se calculan las distancias de: Mahalanobis, euclidean, pearson,jensen-shannon, divergence. Tambien se utilizo la función dist.diversity la cual ejecuta todas las medidas de distancias del getDistMethods(), la cual sirvio para verificar las antes mensionadas. De la relación de las posiciones de cada una de las matrices tomando como referencia la diagonal principal, se muestra el valor de la distancia.
+
+
+## Propuestas de análisis de datos desbalanceados
+
+### A nivel de datos
+
+Se utiliza algún mecanismo para igualar la cantidad de datos. Entre las propuestas encontramos:
+
+-   **Upsampling:** reducción para lograr igualar número de elementos en las categorías.
+
+-   **Oversampling:** remuestrea la de menor datos hasta igualar a la de mayor datos. Remuestro tipo bootstrap.
+
+-   **Rose:** combinación de Upsampling y Oversampling. (Cantidad intermedia).
+
+-   **Smote:** combinación de Upsampling y Oversampling. (Cantidad mayor de datos).
+
+### A nivel de algoritmo
+
+-   Métodos de clasificación.
+
+-   Métodos de aprendizaje automático: supervisado o no supervisado.
+
+
+```{r}
+
+binary <-DATOSCA[,c(36,35,34,33)]
+data<-binary
+names(data)
+dim(data)
+str(data)
+data$CalificadorT<-factor(data$CalificadorT)
+table(data$CalificadorT)
+prop.table(table(data$CalificadorT))
+summary(data)
+```
+## Partición de la base de datos
+
+```{r}
+library(caret)
+set.seed(1234)
+index <- createDataPartition(data$CalificadorT, p = 0.8, list = FALSE)
+train <- data[index, ]
+test <- data[-index, ]
+names(train)<-c("Class","Delta","Tmax","Tmin")
+names(test)<-c("Class","Delta","Tmax","Tmin")
+```
+## Métodos de submuestreo para la base de datos de entrenamiento
+
+### Upsampling
+
+```{r}
+set.seed(111)
+trainup <- upSample(x = train[, -ncol(train)], y = train$Class)
+table(trainup$Class)
+```
+
+### Downsampling
+
+```{r}
+set.seed(123)
+traindown <- downSample(x = train[, -ncol(train)], y = train$Class)
+table(traindown$Class)
+```
+
+### Rose
+
+```{r}
+library(ROSE)
+set.seed(111)
+trainrose <- ROSE(Class~., data = train)$data
+table(trainrose$Class)
+```
+
+### Smote
+
+```{r}
+library(performanceEstimation)
+#library(DMwR)
+set.seed(111)
+trainsmote <-smote(Class ~ ., data = train)
+table(trainsmote$Class)
+```
+## Criterios
+
+
+
+La matriz de confusión describe el rendimiento completo del ajuste realizado por el modelo propuesto.
+
+
+
+## Entrenamiento del modelo de regresión logística
+
+Se realizará el ajuste del modelo de clasificación en términos de si está presente la metodología de remuestreo para eliminar fuentes de variación externas en términos de la presencia de datos atípicos.
+
+### Sin submuestreo
+
+```{r}
+set.seed(123)
+model <- glm(Class~ ., data = train, family = "binomial")
+summary(model)
+#propuesta a apartir de las variables estadísticamente significativas
+set.seed(123)
+finalmodel <- glm(Class~Delta, data = train, family = "binomial")
+summary(finalmodel)
+
+```
+
+La matriz de confusión está dada por:
+
+```{r}
+pred <- predict(finalmodel, test, type = "response")
+pred <- as.integer(pred > 0.5)
+confusionMatrix(as.factor(pred), test$Class)
+```
+
+### Upsampling con la data de entrenamiento
+
+```{r}
+set.seed(123)
+modelup <- glm(Class~Delta, data = trainup, family = "binomial")
+summary(modelup)
+pred <- predict(modelup, test, type = "response")
+pred <- as.integer(pred > 0.5)
+confusionMatrix(as.factor(pred), test$Class)
+```
+
+### Down sampling the training set
+
+```{r}
+set.seed(123)
+modeldown <- glm(Class ~Delta, data = traindown, family = "binomial")
+pred <- predict(modeldown, test, type = "response")
+pred <- as.integer(pred > 0.5)
+confusionMatrix(as.factor(pred), test$Class)
+```
+
+### Subsampline the train set by ROSE
+
+```{r}
+set.seed(123)
+modelrose <- glm(Class ~Delta, data = trainrose, family = "binomial")
+pred <- predict(modelrose, test, type = "response")
+pred <- as.integer(pred > 0.5)
+confusionMatrix(as.factor(pred), test$Class)
+
+```
+
+### Subsampling the train set by SMOTE
+
+```{r}
+set.seed(123)
+modelsmote <- glm(Class~Delta, data = trainsmote, family = "binomial")
+pred <- predict(modelsmote, test, type = "response")
+pred <- as.integer(pred > 0.5)
+confusionMatrix(as.factor(pred), test$Class)
+
+
+```
+
+#### The Conclusion
+
+With the imbalanced data most machine learning model tend to more efficiently predict the majority class than the minority class. To correct thus this behavior we can use one of the above discussed methods to get more closer accuracy rates between classes. However, deep learning model can easily handle this problem by specifying the class weights.
+
+**Falta: Oversampling** Revisar <https://rstudio-pubs-static.s3.amazonaws.com/607601_57a11284917f4d79933f4c4db3d41713.html>
+
+#### Someones keywords
+
+-   How to deal with imbalanced data in R?
+
+-   Data Pre-processing
+
+-   Imbalance Data (Decision Tree)
+
+-   Undersampling, Oversampling, Both, SMOTE
+
+-   Performance Metrics: Accuracy, Error Rate, Specificity, Precision, Recall(Sensitivity), F Measure, ROC, AUC
+
+-   Build Model (Logistic Regression)
+
+-   Model Diagnostics: VIF, Cutoff, Misclassification Error, Confusion Matrix, Concordance
+
+#### Accurancy (presición del modelo)
+
+La proporción de veces que el modelo realiza una predicción o clasificación de forma correcta. Se define como el cociente entre el número de veces que el modelo ajustado clasifica (o predice) de forma correcta y el número total de predicciones o clasificaciones realizadas.
+
+Es usada como una medida del rendimiento del modelo cuando se utilizan particiones tipo entrenamiento y test.
+
+#### Términos importantes en la matriz de confusión
+
+-   **True Positives:** The cases in which we predicted YES and the actual output was also YES.
+
+-   **True Negatives:** The cases in which we predicted NO and the actual output was NO.
+
+-   **False Positives:** The cases in which we predicted YES and the actual output was NO.
+
+-   **False Negatives:** The cases in which we predicted NO and the actual output was YES.
+
+```{r}
+# Preparación de los datos ------------------------------------------------
+# Cargar la base de datos
+# Curvas ROC y Área bajo la curva (AUC) 
+
+binary <- DATOSCA[c(1:40),c(33:36)]
+names(binary)<-c("MediaErrorRelativo","MaxErrorRelativo","MinError Relativo","Class")
+binary$Class<-factor(binary$Class)
+str(binary)
+
+#Proceso de regresión del modelo
+
+mymodel <- multinom(Class~.,data = binary)
+
+#Tasa de clasificación para el modelo
+p <- predict(mymodel,binary)
+tab <- table(p,binary$Class)
+tab # matriz de confución
+1-sum(diag(tab))/sum(tab)
+
+table(binary$Class)
+
+# Evaluación de desempeño del modelo
+pred <- predict(mymodel,binary,type = "prob")
+head(pred)
+head(binary)
+hist(pred)
+pred <- prediction(pred,binary$Class)
+eval <- performance(pred,"Class")
+plot(eval)
+
+abline(h=0.8944844,v=0.4203478) #0.8944844 0.4203478 
+
+#Identificación del mejor corte y precisión
+eval
+max <- which.max(slot(eval,"y.values")[[1]])
+max
+acc <- slot(eval,"y.values")[[1]][[max]]
+acc
+cut <- slot(eval,"x.values")[[1]][[max]]
+cut
+print(c(Accuracy=acc,Cutoff = cut))
+##########
+
+#Curva de caracteísticas de funcionamiento del receptor (ROC)
+roc <- performance(pred,"tpr","fpr")# tpr true positive rate, fpr false positive rate
+plot(roc,colorize = T,
+     main = "ROC Curve",
+     ylab = "Sensitivity",
+     xlab = "1-Specificity")
+abline(a=0,b=1)
+
+#Área bajo la curva(AUC)
+auc <- performance(pred,"auc")
+auc <- unlist(slot(auc,"y.values"))
+round(auc,6)# redondear
+
+legend(0.5,0.3,auc,title = "AUC",cex = 1.1)
+
+#Evaluación del modelo
+precrec_obj2 <- evalmod(scores = binary$Delta, labels = binary$Class, mode="basic")
+autoplot(precrec_obj2)  
+
+
+
+```
+
